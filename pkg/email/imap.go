@@ -3,6 +3,7 @@ package email
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -41,7 +42,10 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]string, 
 	if len(seqNums) == 0 {
 		return []string{}, nil
 	}
-	items := []imap.FetchItem{imap.FetchBody}
+
+	// We want to fetch `BODY.PEEK[]`, peek to prevent marking the emails as `Seen`.
+	section := &imap.BodySectionName{Peek: true}
+	items := []imap.FetchItem{section.FetchItem()}
 	msgs := make(chan *imap.Message, len(seqNums))
 	seqSet := new(imap.SeqSet)
 	seqSet.AddNum(seqNums...)
@@ -54,27 +58,22 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]string, 
 		if msg == nil {
 			continue
 		}
+		for _, bodySection := range msg.Body {
+			msgInvites, err := extractCalendarInvites(bodySection)
+			if err != nil {
+				return invites, err
+			}
+			invites = append(invites, msgInvites...)
 
-		msgInvites, err := extractCalendarInvites(msg)
-		if err != nil {
-			return nil, nil //fmt.Errorf("failed to extract calendar invites: %v", err)
 		}
-		invites = append(invites, msgInvites...)
 	}
-
 	return invites, nil
 }
 
-func extractCalendarInvites(msg *imap.Message) ([]string, error) {
+func extractCalendarInvites(bodySection imap.Literal) ([]string, error) {
 	var invites []string
-	// Get the message body
-	body := msg.GetBody(&imap.BodySectionName{})
-	if body == nil {
-		return nil, fmt.Errorf("message body is empty")
-	}
 
-	// Create a new mail reader
-	mr, err := mail.CreateReader(body)
+	mr, err := mail.CreateReader(bodySection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mail reader: %v", err)
 	}
@@ -87,9 +86,8 @@ func extractCalendarInvites(msg *imap.Message) ([]string, error) {
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to read email part: %v", err)
 		}
-
 		// Check if the part is a calendar invite
-		if p.Header.Get("Content-Type") == "text/calendar" {
+		if strings.HasPrefix(p.Header.Get("Content-Type"), "text/calendar") {
 			invite, err := io.ReadAll(p.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read calendar invite: %v", err)
