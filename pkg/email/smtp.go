@@ -11,22 +11,26 @@ import (
 	"github.com/emersion/go-webdav/caldav"
 )
 
-type client struct {
-	username, password, host, smtpPort, imapPort string
+type smtpClient struct {
+	from string
+	c    *smtp.Client
 }
 
-func NewMailClient(username, password, host, smtpPort, imapPort string) *client {
-	return &client{
-		username: username,
-		password: password,
-		host:     host,
-		smtpPort: smtpPort,
-		imapPort: imapPort,
+func NewSMTPClient(username, password, host, port string) (*smtpClient, error) {
+	smtpServer := fmt.Sprintf("%s:%s", host, port)
+	c, err := smtp.DialStartTLS(smtpServer, nil)
+	if err != nil {
+		return nil, err
 	}
+	c.Auth(sasl.NewLoginClient(username, password))
+	return &smtpClient{
+		from: username,
+		c:    c,
+	}, nil
 }
 
-func (c *client) SendCalendarInvite(calObject caldav.CalendarObject) error {
-	from := c.username
+func (c *smtpClient) SendCalendarInvite(calObject caldav.CalendarObject) error {
+	from := c.from
 	to := attendees(calObject)
 	if len(to) == 0 {
 		return nil
@@ -57,14 +61,7 @@ func (c *client) SendCalendarInvite(calObject caldav.CalendarObject) error {
 	msg += buf.String()
 	msg += "\r\n--boundary--\r\n"
 
-	smtpServer := fmt.Sprintf("%s:%s", c.host, c.smtpPort)
-	auth := sasl.NewLoginClient(c.username, c.password)
-	smtpClient, err := smtp.DialStartTLS(smtpServer, nil)
-	if err != nil {
-		return err
-	}
-	smtpClient.Auth(auth)
-	return smtpClient.SendMail(from, to, strings.NewReader(msg))
+	return c.c.SendMail(from, to, strings.NewReader(msg))
 }
 
 func attendees(calObject caldav.CalendarObject) []string {
@@ -90,11 +87,4 @@ func subject(calObject caldav.CalendarObject) string {
 		}
 	}
 	return subject
-}
-
-func (c *client) CheckCalendarInvite() error {
-	// use imap to check  my emails for calendar invites or use any other techniques that does
-	// not increase the load on my mail server.
-	// do not fetch messages older than a given time
-	return nil
 }
