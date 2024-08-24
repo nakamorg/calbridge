@@ -9,35 +9,66 @@ import (
 )
 
 const (
-	header = "WWW-Authenticate"
+	authHeader = "WWW-Authenticate"
 )
 
-type DigestAuthClient struct {
-	Username, Password, Header string
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
-func (c DigestAuthClient) Do(req *http.Request) (*http.Response, error) {
+type digestAuthHTTPClient struct {
+	c                  HTTPClient
+	username, password string
+}
+
+type basicAuthHTTPClient struct {
+	c                  HTTPClient
+	username, password string
+}
+
+// HTTPClientWithBasicAuth returns an HTTP client that adds basic
+// authentication to all outgoing requests. If c is nil, http.DefaultClient is
+// used.
+func HTTPClientWithBasicAuth(c HTTPClient, username, password string) HTTPClient {
+	if c == nil {
+		c = http.DefaultClient
+	}
+	return &basicAuthHTTPClient{c, username, password}
+}
+
+func (c *basicAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(c.username, c.password)
+	return c.c.Do(req)
+}
+
+// HTTPClientWithDigestAuth returns an HTTP client that adds basic
+// authentication to all outgoing requests. If c is nil, http.DefaultClient is
+// used.
+func HTTPClientWithDigestAuth(c HTTPClient, username, password string) HTTPClient {
+	if c == nil {
+		c = http.DefaultClient
+	}
+	return &digestAuthHTTPClient{c, username, password}
+}
+
+func (c *digestAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	// We need to copy the request body
 	reqBody, err := req.GetBody()
 	if err != err {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.c.Do(req)
 	if err != nil {
 		return resp, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		authHeader := header
-		if len(c.Header) != 0 {
-			authHeader = c.Header
-		}
 		challenge := resp.Header.Get(authHeader)
 		if len(challenge) == 0 {
 			return resp, fmt.Errorf("empty challenge header")
 		}
-		digestAuthorization := digestHeader(c.Username, c.Password, req.Method, req.URL.String(), challenge)
+		digestAuthorization := digestHeader(c.username, c.password, req.Method, req.URL.String(), challenge)
 		// Create a new request with the same URL and body as the original request
 		newReq := req.Clone(context.Background())
 		newReq.Body = reqBody
