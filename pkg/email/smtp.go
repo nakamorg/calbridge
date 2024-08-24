@@ -29,6 +29,10 @@ func NewSMTPClient(username, password, host, port string) (*smtpClient, error) {
 	}, nil
 }
 
+func (c *smtpClient) Close() {
+	c.c.Close()
+}
+
 func (c *smtpClient) SendCalendarInvite(calObject caldav.CalendarObject) error {
 	from := c.from
 	to := attendees(calObject)
