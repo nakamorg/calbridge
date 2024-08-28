@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -53,9 +54,9 @@ func HTTPClientWithDigestAuth(c HTTPClient, username, password string) HTTPClien
 
 func (c *digestAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	// We need to copy the request body
-	reqBody, err := req.GetBody()
-	if err != err {
-		return nil, err
+	var reqBody io.ReadCloser
+	if req.Body != nil {
+		reqBody, _ = req.GetBody()
 	}
 	resp, err := c.c.Do(req)
 	if err != nil {

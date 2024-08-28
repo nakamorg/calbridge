@@ -8,7 +8,6 @@ import (
 	"github.com/emersion/go-ical"
 	sasl "github.com/emersion/go-sasl"
 	smtp "github.com/emersion/go-smtp"
-	"github.com/emersion/go-webdav/caldav"
 )
 
 type smtpClient struct {
@@ -33,22 +32,22 @@ func (c *smtpClient) Close() {
 	c.c.Close()
 }
 
-func (c *smtpClient) SendCalendarInvite(calObject caldav.CalendarObject) error {
+func (c *smtpClient) SendCalendarInvite(cal *ical.Calendar) error {
 	from := c.from
-	to := attendees(calObject)
+	to := attendees(cal)
 	if len(to) == 0 {
 		return nil
 	}
 
 	var buf bytes.Buffer
-	if err := ical.NewEncoder(&buf).Encode(calObject.Data); err != nil {
+	if err := ical.NewEncoder(&buf).Encode(cal); err != nil {
 		return err
 	}
 
 	headers := make(map[string]string)
 	headers["From"] = from
 	headers["To"] = strings.Join(to, ",")
-	headers["Subject"] = subject(calObject)
+	headers["Subject"] = subject(cal)
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "multipart/mixed; boundary=\"boundary\""
 
@@ -68,10 +67,10 @@ func (c *smtpClient) SendCalendarInvite(calObject caldav.CalendarObject) error {
 	return c.c.SendMail(from, to, strings.NewReader(msg))
 }
 
-func attendees(calObject caldav.CalendarObject) []string {
+func attendees(cal *ical.Calendar) []string {
 	var attendees []string
 	mailPrefix := "mailto:"
-	for _, e := range calObject.Data.Events() {
+	for _, e := range cal.Events() {
 		candidates := e.Props.Values(ical.PropAttendee)
 		for _, c := range candidates {
 			address := c.Value
@@ -83,9 +82,9 @@ func attendees(calObject caldav.CalendarObject) []string {
 	return attendees
 }
 
-func subject(calObject caldav.CalendarObject) string {
+func subject(cal *ical.Calendar) string {
 	subject := "Invitation"
-	for _, e := range calObject.Data.Events() {
+	for _, e := range cal.Events() {
 		for _, p := range e.Props.Values(ical.PropSummary) {
 			subject = subject + ": " + p.Value
 		}

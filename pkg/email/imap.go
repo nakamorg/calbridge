@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emersion/go-ical"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/mail"
 	"github.com/emersion/go-sasl"
 )
 
-func ReadCalendarInvites(host, username, password string, hours int) ([]string, error) {
+func ReadCalendarInvites(host, username, password string, hours int) ([]*ical.Calendar, error) {
 	// Connect to the IMAP server
 	c, err := client.DialTLS(host, nil)
 	if err != nil {
@@ -40,7 +41,7 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]string, 
 		return nil, fmt.Errorf("failed to search emails: %v", err)
 	}
 	if len(seqNums) == 0 {
-		return []string{}, nil
+		return nil, nil
 	}
 
 	// We want to fetch `BODY.PEEK[]`, peek to prevent marking the emails as `Seen`.
@@ -53,7 +54,7 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]string, 
 		return nil, fmt.Errorf("failed to fetch email: %v", err)
 	}
 
-	var invites []string
+	var invites []*ical.Calendar
 	for msg := range msgs {
 		if msg == nil {
 			continue
@@ -70,14 +71,14 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]string, 
 	return invites, nil
 }
 
-func extractCalendarInvites(bodySection imap.Literal) ([]string, error) {
-	var invites []string
+func extractCalendarInvites(bodySection imap.Literal) ([]*ical.Calendar, error) {
+	var invites []*ical.Calendar
 
 	mr, err := mail.CreateReader(bodySection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mail reader: %v", err)
 	}
-
+	defer mr.Close()
 	// Iterate over the email parts
 	for {
 		p, err := mr.NextPart()
@@ -88,13 +89,13 @@ func extractCalendarInvites(bodySection imap.Literal) ([]string, error) {
 		}
 		// Check if the part is a calendar invite
 		if strings.HasPrefix(p.Header.Get("Content-Type"), "text/calendar") {
-			invite, err := io.ReadAll(p.Body)
+			invite, err := ical.NewDecoder(p.Body).Decode() // io.ReadAll(p.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read calendar invite: %v", err)
 			}
-			invites = append(invites, string(invite))
+
+			invites = append(invites, invite)
 		}
 	}
-
 	return invites, nil
 }
