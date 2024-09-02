@@ -79,7 +79,7 @@ func (c *client) PutEvents(ctx context.Context, cals []*ical.Calendar) error {
 		}
 		path := fmt.Sprintf("%s.%s", uid, ical.Extension)
 		if strings.HasPrefix(string(ical.EventCancelled), methodProp(cal)) {
-			return caldavClient.RemoveAll(ctx, path)
+			caldavClient.RemoveAll(ctx, path) // try to remove but do not err on errors
 		}
 		cal.Props.Del(ical.PropMethod)
 		if _, err := caldavClient.PutCalendarObject(ctx, path, cal); err != nil {

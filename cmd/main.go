@@ -49,7 +49,7 @@ func main() {
 		}
 	}
 	invites, err := email.ReadCalendarInvites(
-		"mail.nakam.org:993",
+		fmt.Sprintf("%s:993", os.Getenv("IMAP_HOST")),
 		os.Getenv("IMAP_USER"),
 		os.Getenv("IMAP_PASSWORD"),
 		3,
@@ -57,7 +57,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to read mails: %v", err)
 	}
-	fmt.Printf("Got %d invites\n", len(invites))
 	if err := client.PutEvents(ctx, invites); err != nil {
 		fmt.Printf("err adding invites: %v\n", err)
 	}
