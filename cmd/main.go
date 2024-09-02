@@ -17,7 +17,7 @@ func main() {
 	if err := util.LoadDotEnv(""); err != nil {
 		log.Fatal(err)
 	}
-	client, err := caldav.NewClient(
+	calClient, err := caldav.NewClient(
 		os.Getenv("CALDAV_USER"),
 		os.Getenv("CALDAV_PASSWORD"),
 		os.Getenv("CALDAV_URL"),
@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create caldav client: %v", err)
 	}
-	mailClient, err := email.NewSMTPClient(
+	smtpClient, err := email.NewSMTPClient(
 		os.Getenv("SMTP_USER"),
 		os.Getenv("SMTP_PASSWORD"),
 		os.Getenv("SMTP_HOST"),
@@ -34,9 +34,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create smtp client: %v", err)
 	}
-	defer mailClient.Close()
+	defer smtpClient.Close()
 
-	events, err := client.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0))
+	imapClient, err := email.NewIMAPClient(
+		os.Getenv("IMAP_USER"),
+		os.Getenv("IMAP_PASSWORD"),
+		os.Getenv("IMAP_HOST"),
+		"993",
+	)
+	if err != nil {
+		log.Fatalf("Failed to create imap client: %v", err)
+	}
+	defer imapClient.Close()
+
+	events, err := calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0))
 	if err != nil {
 		log.Fatalf("Failed to read future events: %v", err)
 	}
@@ -44,20 +55,15 @@ func main() {
 	// Print the retrieved events
 	fmt.Printf("Found %d future events\n", len(events))
 	for _, event := range events {
-		if err := mailClient.SendCalendarInvite(event); err != nil {
+		if err := smtpClient.SendCalendarInvite(event); err != nil {
 			log.Fatalf("Failed to invite: %v", err)
 		}
 	}
-	invites, err := email.ReadCalendarInvites(
-		fmt.Sprintf("%s:993", os.Getenv("IMAP_HOST")),
-		os.Getenv("IMAP_USER"),
-		os.Getenv("IMAP_PASSWORD"),
-		3,
-	)
+	invites, err := imapClient.ReadCalendarInvites(3)
 	if err != nil {
 		log.Fatalf("Failed to read mails: %v", err)
 	}
-	if err := client.PutEvents(ctx, invites); err != nil {
+	if err := calClient.PutEvents(ctx, invites); err != nil {
 		fmt.Printf("err adding invites: %v\n", err)
 	}
 }

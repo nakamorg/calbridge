@@ -13,20 +13,34 @@ import (
 	"github.com/emersion/go-sasl"
 )
 
-func ReadCalendarInvites(host, username, password string, hours int) ([]*ical.Calendar, error) {
-	// Connect to the IMAP server
-	c, err := client.DialTLS(host, nil)
+type imapClient struct {
+	username string
+	c        *client.Client
+}
+
+func NewIMAPClient(username, password, host, port string) (*imapClient, error) {
+	c, err := client.DialTLS(fmt.Sprintf("%s:%s", host, port), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to IMAP server: %v", err)
 	}
-	defer c.Logout()
-
 	if err := c.Authenticate(sasl.NewPlainClient("", username, password)); err != nil {
 		return nil, fmt.Errorf("failed to login to IMAP server: %v", err)
 	}
+	return &imapClient{
+		username: username,
+		c:        c,
+	}, nil
+}
+
+func (c *imapClient) Close() {
+	c.c.Logout()
+}
+
+func (c *imapClient) ReadCalendarInvites(hours int) ([]*ical.Calendar, error) {
+	client := c.c
 
 	// Select the INBOX mailbox
-	if _, err := c.Select("INBOX", false); err != nil {
+	if _, err := client.Select("INBOX", false); err != nil {
 		return nil, fmt.Errorf("failed to select INBOX: %v", err)
 	}
 
@@ -36,7 +50,7 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]*ical.Ca
 	criteria.SentSince = since
 
 	// Search for emails within the time range
-	seqNums, err := c.Search(criteria)
+	seqNums, err := client.Search(criteria)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search emails: %v", err)
 	}
@@ -50,7 +64,7 @@ func ReadCalendarInvites(host, username, password string, hours int) ([]*ical.Ca
 	msgs := make(chan *imap.Message, len(seqNums))
 	seqSet := new(imap.SeqSet)
 	seqSet.AddNum(seqNums...)
-	if err := c.Fetch(seqSet, items, msgs); err != nil {
+	if err := client.Fetch(seqSet, items, msgs); err != nil {
 		return nil, fmt.Errorf("failed to fetch email: %v", err)
 	}
 
