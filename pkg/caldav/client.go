@@ -11,24 +11,24 @@ import (
 	"github.com/nakamorg/calbridge/pkg/http"
 )
 
-type client struct {
+type Client struct {
 	url string
 	c   *caldav.Client
 }
 
-func NewClient(username, password, url string) (*client, error) {
+func NewClient(username, password, url string) (*Client, error) {
 	c, err := caldav.NewClient(http.HTTPClientWithDigestAuth(nil, username, password), url)
 	if err != nil {
 		return nil, err
 	}
-	return &client{
+	return &Client{
 		url: url,
 		c:   c,
 	}, nil
 }
 
 // GetCalendarObject returns the CalendarObjects from your calendar between the start and end time
-func (c *client) GetCalendarObject(ctx context.Context, start, end time.Time) ([]caldav.CalendarObject, error) {
+func (c *Client) GetCalendarObject(ctx context.Context, start, end time.Time) ([]caldav.CalendarObject, error) {
 	var calObjects []caldav.CalendarObject
 	caldavClient := c.c
 
@@ -54,7 +54,7 @@ func (c *client) GetCalendarObject(ctx context.Context, start, end time.Time) ([
 }
 
 // GetEvents returns the CalendarObjects from your calendar between the start and end time
-func (c *client) GetEvents(ctx context.Context, start, end time.Time) ([]*ical.Calendar, error) {
+func (c *Client) GetEvents(ctx context.Context, start, end time.Time) ([]*ical.Calendar, error) {
 	calObjects, err := c.GetCalendarObject(ctx, start, end)
 	if err != nil {
 		return nil, err
@@ -67,24 +67,23 @@ func (c *client) GetEvents(ctx context.Context, start, end time.Time) ([]*ical.C
 	return events, nil
 }
 
-// PutEvents puts the CalendarObjects to your calendar. It removes the METHOD property of the calendar.
-// If the property value was CANCEL, it'll try to remove the event from the server.
-func (c *client) PutEvents(ctx context.Context, cals []*ical.Calendar) error {
+// PutEvent puts the Calendar event in your calendar. It removes the METHOD property from the event.
+// If the METHOD property value was CANCEL, it'll try to remove the event from the server.
+func (c *Client) PutEvent(ctx context.Context, cal *ical.Calendar) error {
 	caldavClient := c.c
 
-	for _, cal := range cals {
-		uid, err := eventUid(cal)
-		if err != nil {
-			return fmt.Errorf("could not calculate path to save the event: %v", err)
-		}
-		path := fmt.Sprintf("%s.%s", uid, ical.Extension)
-		if strings.HasPrefix(string(ical.EventCancelled), methodProp(cal)) {
-			caldavClient.RemoveAll(ctx, path) // try to remove but do not err on errors
-		}
-		cal.Props.Del(ical.PropMethod)
-		if _, err := caldavClient.PutCalendarObject(ctx, path, cal); err != nil {
-			return err
-		}
+	uid, err := eventUid(cal)
+	if err != nil {
+		return fmt.Errorf("could not calculate path to save the event: %v", err)
+	}
+	path := fmt.Sprintf("%s.%s", uid, ical.Extension)
+	if strings.HasPrefix(string(ical.EventCancelled), methodProp(cal)) {
+		caldavClient.RemoveAll(ctx, path) // ignore any errors here
+		return nil
+	}
+	cal.Props.Del(ical.PropMethod)
+	if _, err := caldavClient.PutCalendarObject(ctx, path, cal); err != nil {
+		return err
 	}
 	return nil
 }

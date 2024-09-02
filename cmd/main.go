@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/emersion/go-ical"
 	"github.com/nakamorg/calbridge/pkg/caldav"
 	"github.com/nakamorg/calbridge/pkg/email"
 	"github.com/nakamorg/calbridge/pkg/util"
@@ -47,23 +48,44 @@ func main() {
 	}
 	defer imapClient.Close()
 
-	events, err := calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0))
-	if err != nil {
-		log.Fatalf("Failed to read future events: %v", err)
+	if err := sendInvites(ctx, calClient, smtpClient); err != nil {
+		log.Fatal(err)
 	}
 
-	// Print the retrieved events
-	fmt.Printf("Found %d future events\n", len(events))
+	if err := addInvites(ctx, calClient, imapClient); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *email.SMTPClient) error {
+	var events []*ical.Calendar
+	var err error
+
+	if events, err = calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0)); err != nil {
+		return fmt.Errorf("failed reading future events: %v", err)
+	}
+
 	for _, event := range events {
-		if err := smtpClient.SendCalendarInvite(event); err != nil {
-			log.Fatalf("Failed to invite: %v", err)
+		if err = smtpClient.SendCalendarInvite(event); err != nil {
+			return fmt.Errorf("failed sending invitation: %v", err)
 		}
 	}
-	invites, err := imapClient.ReadCalendarInvites(3)
-	if err != nil {
-		log.Fatalf("Failed to read mails: %v", err)
+	return nil
+}
+
+func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email.IMAPClient) error {
+	var events []*ical.Calendar
+	var err error
+
+	if events, err = imapClient.ReadCalendarInvites(3); err != nil {
+		return fmt.Errorf("failed reading emails: %v", err)
 	}
-	if err := calClient.PutEvents(ctx, invites); err != nil {
-		fmt.Printf("err adding invites: %v\n", err)
+
+	for _, event := range events {
+		if err := calClient.PutEvent(ctx, event); err != nil {
+			return fmt.Errorf("failed adding event: %v", err)
+		}
 	}
+	return nil
 }

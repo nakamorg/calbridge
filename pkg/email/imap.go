@@ -13,12 +13,12 @@ import (
 	"github.com/emersion/go-sasl"
 )
 
-type imapClient struct {
+type IMAPClient struct {
 	username string
 	c        *client.Client
 }
 
-func NewIMAPClient(username, password, host, port string) (*imapClient, error) {
+func NewIMAPClient(username, password, host, port string) (*IMAPClient, error) {
 	c, err := client.DialTLS(fmt.Sprintf("%s:%s", host, port), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to IMAP server: %v", err)
@@ -26,17 +26,17 @@ func NewIMAPClient(username, password, host, port string) (*imapClient, error) {
 	if err := c.Authenticate(sasl.NewPlainClient("", username, password)); err != nil {
 		return nil, fmt.Errorf("failed to login to IMAP server: %v", err)
 	}
-	return &imapClient{
+	return &IMAPClient{
 		username: username,
 		c:        c,
 	}, nil
 }
 
-func (c *imapClient) Close() {
+func (c *IMAPClient) Close() {
 	c.c.Logout()
 }
 
-func (c *imapClient) ReadCalendarInvites(hours int) ([]*ical.Calendar, error) {
+func (c *IMAPClient) ReadCalendarInvites(hours int) ([]*ical.Calendar, error) {
 	client := c.c
 
 	// Select the INBOX mailbox
