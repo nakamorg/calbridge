@@ -10,29 +10,29 @@ import (
 	smtp "github.com/emersion/go-smtp"
 )
 
-type smtpClient struct {
+type SMTPClient struct {
 	from string
 	c    *smtp.Client
 }
 
-func NewSMTPClient(username, password, host, port string) (*smtpClient, error) {
+func NewSMTPClient(username, password, host, port string) (*SMTPClient, error) {
 	smtpServer := fmt.Sprintf("%s:%s", host, port)
 	c, err := smtp.DialStartTLS(smtpServer, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.Auth(sasl.NewLoginClient(username, password))
-	return &smtpClient{
+	return &SMTPClient{
 		from: username,
 		c:    c,
 	}, nil
 }
 
-func (c *smtpClient) Close() {
+func (c *SMTPClient) Close() {
 	c.c.Close()
 }
 
-func (c *smtpClient) SendCalendarInvite(cal *ical.Calendar) error {
+func (c *SMTPClient) SendCalendarInvite(cal *ical.Calendar) error {
 	from := c.from
 	to := attendees(cal)
 	if len(to) == 0 {
