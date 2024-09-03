@@ -83,17 +83,15 @@ func EventSummary(cal *ical.Calendar) string {
 func EventDTStart(cal *ical.Calendar) (time.Time, error) {
 	var start time.Time
 	for _, e := range cal.Events() {
-		for _, p := range e.Props.Values(ical.PropDateTimeStart) {
-			dtstart, err := p.DateTime(time.UTC)
-			if err != nil {
-				return start, err
-			}
-			if start.IsZero() {
-				start = dtstart
-			}
-			if start.After(dtstart) {
-				start = dtstart
-			}
+		dtstart, err := e.DateTimeStart(time.UTC)
+		if err != nil {
+			return start, err
+		}
+		if start.IsZero() {
+			start = dtstart
+		}
+		if start.After(dtstart) {
+			start = dtstart
 		}
 	}
 	return start, nil
@@ -102,17 +100,15 @@ func EventDTStart(cal *ical.Calendar) (time.Time, error) {
 func EventDTEnd(cal *ical.Calendar) (time.Time, error) {
 	var end time.Time
 	for _, e := range cal.Events() {
-		for _, p := range e.Props.Values(ical.PropDateTimeEnd) {
-			dtend, err := p.DateTime(time.UTC)
-			if err != nil {
-				return end, err
-			}
-			if end.IsZero() {
-				end = dtend
-			}
-			if end.Before(dtend) {
-				end = dtend
-			}
+		dtend, err := e.DateTimeEnd(time.UTC)
+		if err != nil {
+			return end, err
+		}
+		if end.IsZero() {
+			end = dtend
+		}
+		if end.Before(dtend) {
+			end = dtend
 		}
 	}
 	return end, nil
