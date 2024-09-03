@@ -8,6 +8,7 @@ import (
 	"github.com/emersion/go-ical"
 	sasl "github.com/emersion/go-sasl"
 	smtp "github.com/emersion/go-smtp"
+	"github.com/nakamorg/calbridge/pkg/util"
 )
 
 type SMTPClient struct {
@@ -32,8 +33,13 @@ func (c *SMTPClient) Close() {
 	c.c.Close()
 }
 
+// SendCalendarInvite sends calendar invite to all the attendees using email. Invites are not sent
+// if the calendar organizer and the email sender does not match
 func (c *SMTPClient) SendCalendarInvite(cal *ical.Calendar) error {
 	from := c.from
+	if !isOrganizer(cal, from) {
+		return nil
+	}
 	to := attendees(cal)
 	if len(to) == 0 {
 		return nil
@@ -69,25 +75,23 @@ func (c *SMTPClient) SendCalendarInvite(cal *ical.Calendar) error {
 
 func attendees(cal *ical.Calendar) []string {
 	var attendees []string
-	mailPrefix := "mailto:"
-	for _, e := range cal.Events() {
-		candidates := e.Props.Values(ical.PropAttendee)
-		for _, c := range candidates {
-			address := c.Value
-			if c.Params.Get(ical.ParamParticipationStatus) == "NEEDS-ACTION" && strings.HasPrefix(address, mailPrefix) {
-				attendees = append(attendees, strings.TrimPrefix(address, mailPrefix))
-			}
+	attendeeToParticipationStatus := util.EventAttendees(cal)
+	for attendee, status := range attendeeToParticipationStatus {
+		if status == "NEEDS-ACTION" {
+			attendees = append(attendees, attendee)
 		}
 	}
 	return attendees
 }
 
+func isOrganizer(cal *ical.Calendar, user string) bool {
+	organizerToParticipationStatus := util.EventOrganizers(cal)
+	_, ok := organizerToParticipationStatus[user]
+	return ok
+}
+
 func subject(cal *ical.Calendar) string {
 	subject := "Invitation"
-	for _, e := range cal.Events() {
-		for _, p := range e.Props.Values(ical.PropSummary) {
-			subject = subject + ": " + p.Value
-		}
-	}
-	return subject
+	summary := util.EventSummary(cal)
+	return subject + ": " + summary
 }
