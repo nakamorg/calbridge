@@ -74,3 +74,7 @@ func (fb *FileBackend) Put(ctx context.Context, data Data) error {
 	writer.Flush()
 	return writer.Error()
 }
+
+func (fb *FileBackend) Close() error {
+	return nil
+}

@@ -13,17 +13,18 @@ const (
 )
 
 type Data struct {
-	User       string
-	UID        string
-	Hash       string
-	Direction  Direction
-	SyncedTime time.Time
-	Synced     bool
+	User       string    `json:"user"`
+	UID        string    `json:"uid"`
+	Hash       string    `json:"hash"`
+	Direction  Direction `json:"direction"`
+	SyncedTime time.Time `json:"synced_time"`
+	Synced     bool      `json:"synced"`
 }
 
 type Backend interface {
 	Get(ctx context.Context, data Data) (Data, error)
 	Put(ctx context.Context, data Data) error
+	Close() error
 }
 
 type DummyBackend struct{}
@@ -39,5 +40,9 @@ func (b *DummyBackend) Get(ctx context.Context, data Data) (Data, error) {
 }
 
 func (b *DummyBackend) Put(ctx context.Context, data Data) error {
+	return nil
+}
+
+func (b *DummyBackend) Close() error {
 	return nil
 }

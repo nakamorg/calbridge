@@ -51,7 +51,12 @@ func main() {
 	}
 	defer imapClient.Close()
 
-	backend := backend.NewFileBackend("/tmp/calbridge.csv")
+	// backend := backend.NewFileBackend("/tmp/calbridge.csv")
+	backend, err := backend.NewBoltBackend("/tmp/calbridge.db", os.Getenv("IMAP_USER"))
+	if err != nil {
+		log.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
 
 	if err := sendInvites(ctx, calClient, smtpClient, backend); err != nil {
 		log.Fatal(err)
