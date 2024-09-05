@@ -9,7 +9,7 @@ import (
 )
 
 type FileBackend struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	filePath string
 }
 
@@ -18,10 +18,10 @@ func NewFileBackend(filePath string) Backend {
 }
 
 func (fb *FileBackend) Get(ctx context.Context, data Data) (Data, error) {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
+	fb.mu.RLock()
+	defer fb.mu.RUnlock()
 
-	file, err := os.Open(fb.filePath)
+	file, err := os.OpenFile(fb.filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return data, err
 	}
@@ -75,32 +75,6 @@ func (fb *FileBackend) Put(ctx context.Context, data Data) error {
 	return writer.Error()
 }
 
-func (fb *FileBackend) Delete(ctx context.Context, data Data) error {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-
-	file, err := os.OpenFile(fb.filePath, os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	records, err := csv.NewReader(file).ReadAll()
-	if err != nil {
-		return err
-	}
-
-	for i, record := range records {
-		if record[0] == data.User && record[1] == data.UID && record[2] == data.Hash {
-			records = append(records[:i], records[i+1:]...)
-			break
-		}
-	}
-
-	file.Seek(0, 0)
-	file.Truncate(0)
-	writer := csv.NewWriter(file)
-	writer.WriteAll(records)
-	writer.Flush()
-	return writer.Error()
+func (fb *FileBackend) Close() error {
+	return nil
 }

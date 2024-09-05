@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
@@ -51,7 +51,12 @@ func main() {
 	}
 	defer imapClient.Close()
 
-	backend := backend.NewFileBackend("/tmp/calbridge.csv")
+	// backend := backend.NewFileBackend("/tmp/calbridge.csv")
+	backend, err := backend.NewBoltBackend("/tmp/calbridge.db", os.Getenv("IMAP_USER"))
+	if err != nil {
+		log.Fatalf("Failed to create backend: %v", err)
+	}
+	defer backend.Close()
 
 	if err := sendInvites(ctx, calClient, smtpClient, backend); err != nil {
 		log.Fatal(err)
@@ -71,21 +76,18 @@ func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *emai
 	if events, err = calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0)); err != nil {
 		return fmt.Errorf("failed reading future events: %v", err)
 	}
-
+	fmt.Println("sending")
 	for _, event := range events {
-		if data, err = eventBackendData(event); err != nil {
+		if data, err = eventBackendData(ctx, event, backend.DirectionOut, storage); err != nil {
 			return fmt.Errorf("failed creating event backend data: %v", err)
 		}
-		if data, err = storage.Get(ctx, data); err != nil {
-			return fmt.Errorf("failed getting event backend data: %v", err)
-		}
-		if data.Synced {
+		if data.Synced || data.Direction != backend.DirectionOut {
 			continue
 		}
+		fmt.Println(event.Events()[0].Props)
 		if err = smtpClient.SendCalendarInvite(event); err != nil {
 			return fmt.Errorf("failed sending invitation: %v", err)
 		}
-		data.Direction = backend.DirectionOut
 		data.Synced = true
 		data.SyncedTime = time.Now()
 		if err = storage.Put(ctx, data); err != nil {
@@ -103,21 +105,19 @@ func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email
 	if events, err = imapClient.ReadCalendarInvites(3); err != nil {
 		return fmt.Errorf("failed reading emails: %v", err)
 	}
+	fmt.Println("adding")
 
 	for _, event := range events {
-		if data, err = eventBackendData(event); err != nil {
+		if data, err = eventBackendData(ctx, event, backend.DirectionIn, storage); err != nil {
 			return fmt.Errorf("failed creating event backend data: %v", err)
 		}
-		if data, err = storage.Get(ctx, data); err != nil {
-			return fmt.Errorf("failed getting event backend data: %v", err)
-		}
-		if data.Synced {
+		if data.Synced || data.Direction != backend.DirectionIn {
 			continue
 		}
 		if err := calClient.PutEvent(ctx, event); err != nil {
 			return fmt.Errorf("failed adding event: %v", err)
 		}
-		data.Direction = backend.DirectionIn
+		fmt.Println(event.Events()[0].Props)
 		data.Synced = true
 		data.SyncedTime = time.Now()
 		if err = storage.Put(ctx, data); err != nil {
@@ -127,8 +127,11 @@ func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email
 	return nil
 }
 
-func eventBackendData(cal *ical.Calendar) (backend.Data, error) {
-	data := backend.Data{Synced: false}
+func eventBackendData(ctx context.Context, cal *ical.Calendar, direction backend.Direction, storage backend.Backend) (backend.Data, error) {
+	data := backend.Data{
+		Synced:    false,
+		Direction: direction,
+	}
 	for _, event := range cal.Events() {
 		for _, p := range event.Props.Values(ical.PropUID) {
 			data.UID = p.Value
@@ -142,16 +145,41 @@ func eventBackendData(cal *ical.Calendar) (backend.Data, error) {
 		return data, fmt.Errorf("could not find event hash: %v", err)
 	}
 	data.Hash = hash
+
+	if data, err = storage.Get(ctx, data); err != nil {
+		return data, fmt.Errorf("failed getting event backend data: %v", err)
+	}
 	return data, nil
 }
 
 func eventHash(cal *ical.Calendar) (string, error) {
-	hash := sha256.New()
-
+	// We need smaller (in size) hashes and md5 should be secure enough for our case
+	hash := md5.New()
 	var buf bytes.Buffer
-	if err := ical.NewEncoder(&buf).Encode(cal); err != nil {
-		return "", err
+	uid, _ := util.EventUid(cal)
+	attendees := util.EventAttendees(cal)
+	organizers := util.EventOrganizers(cal)
+	desc := util.EventDescription(cal)
+	summary := util.EventSummary(cal)
+	dtstart, _ := util.EventDTStart(cal)
+	dtend, _ := util.EventDTEnd(cal)
+
+	buf.WriteString(uid)
+	for attendee, status := range attendees {
+		buf.WriteString(attendee)
+		buf.WriteString(status)
 	}
+	// TODO: I've noticed that when an event is added to my caldav server, the status for organizer becomes `NEEDS_ACTION`
+	// even though it was ACCEPTED in the received event
+	for organizer, status := range organizers {
+		buf.WriteString(organizer)
+		buf.WriteString(status)
+	}
+	buf.WriteString(desc)
+	buf.WriteString(summary)
+	buf.WriteString(dtstart.String())
+	buf.WriteString(dtend.String())
+
 	hash.Write(buf.Bytes())
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav/caldav"
 	"github.com/nakamorg/calbridge/pkg/http"
+	"github.com/nakamorg/calbridge/pkg/util"
 )
 
 type Client struct {
@@ -72,7 +73,7 @@ func (c *Client) GetEvents(ctx context.Context, start, end time.Time) ([]*ical.C
 func (c *Client) PutEvent(ctx context.Context, cal *ical.Calendar) error {
 	caldavClient := c.c
 
-	uid, err := eventUid(cal)
+	uid, err := util.EventUid(cal)
 	if err != nil {
 		return fmt.Errorf("could not calculate path to save the event: %v", err)
 	}
@@ -97,20 +98,4 @@ func methodProp(cal *ical.Calendar) string {
 		return values[0].Value
 	}
 	return ""
-}
-
-func eventUid(cal *ical.Calendar) (string, error) {
-	if cal == nil {
-		return "", fmt.Errorf("event is nil")
-	}
-	// get the uid from first event, not sure if this might cause issues
-	events := cal.Events()
-	if len(events) != 1 {
-		return "", fmt.Errorf("calendar has %d events, expected 1", len(events))
-	}
-	propUids := events[0].Props.Values(ical.PropUID)
-	if len(propUids) != 1 {
-		return "", fmt.Errorf("length of UID prop is %d, expected 1", len(propUids))
-	}
-	return propUids[0].Value, nil
 }
