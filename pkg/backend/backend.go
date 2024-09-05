@@ -24,7 +24,6 @@ type Data struct {
 type Backend interface {
 	Get(ctx context.Context, data Data) (Data, error)
 	Put(ctx context.Context, data Data) error
-	Delete(ctx context.Context, data Data) error
 }
 
 type DummyBackend struct{}
@@ -40,9 +39,5 @@ func (b *DummyBackend) Get(ctx context.Context, data Data) (Data, error) {
 }
 
 func (b *DummyBackend) Put(ctx context.Context, data Data) error {
-	return nil
-}
-
-func (b *DummyBackend) Delete(ctx context.Context, data Data) error {
 	return nil
 }

@@ -74,33 +74,3 @@ func (fb *FileBackend) Put(ctx context.Context, data Data) error {
 	writer.Flush()
 	return writer.Error()
 }
-
-func (fb *FileBackend) Delete(ctx context.Context, data Data) error {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-
-	file, err := os.OpenFile(fb.filePath, os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	records, err := csv.NewReader(file).ReadAll()
-	if err != nil {
-		return err
-	}
-
-	for i, record := range records {
-		if record[0] == data.User && record[1] == data.UID && record[2] == data.Hash {
-			records = append(records[:i], records[i+1:]...)
-			break
-		}
-	}
-
-	file.Seek(0, 0)
-	file.Truncate(0)
-	writer := csv.NewWriter(file)
-	writer.WriteAll(records)
-	writer.Flush()
-	return writer.Error()
-}
