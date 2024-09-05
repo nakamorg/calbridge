@@ -9,7 +9,7 @@ import (
 )
 
 type FileBackend struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	filePath string
 }
 
@@ -18,10 +18,10 @@ func NewFileBackend(filePath string) Backend {
 }
 
 func (fb *FileBackend) Get(ctx context.Context, data Data) (Data, error) {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
+	fb.mu.RLock()
+	defer fb.mu.RUnlock()
 
-	file, err := os.Open(fb.filePath)
+	file, err := os.OpenFile(fb.filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return data, err
 	}

@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
@@ -147,19 +147,34 @@ func eventBackendData(ctx context.Context, cal *ical.Calendar, direction backend
 	return data, nil
 }
 
-// I don't think this is deterministic. Depending on how and in what order the data is encoded
-// hash will change. We should take it in our control and calculate hash on some specific props
-// of the event
 func eventHash(cal *ical.Calendar) (string, error) {
-	hash := sha256.New()
+	// We need smaller (in size) hashes and md5 should be secure enough for our case
+	hash := md5.New()
 	var buf bytes.Buffer
-	if err := ical.NewEncoder(&buf).Encode(cal); err != nil {
-		return "", err
-	}
-	hash.Write(buf.Bytes())
-	// for _, e := range cal.Events() {
-	// 	props := e.Props
+	uid, _ := util.EventUid(cal)
+	attendees := util.EventAttendees(cal)
+	organizers := util.EventOrganizers(cal)
+	desc := util.EventDescription(cal)
+	summary := util.EventSummary(cal)
+	dtstart, _ := util.EventDTStart(cal)
+	dtend, _ := util.EventDTEnd(cal)
 
-	// }
+	buf.WriteString(uid)
+	for attendee, status := range attendees {
+		buf.WriteString(attendee)
+		buf.WriteString(status)
+	}
+	// TODO: I've noticed that when an event is added to my caldav server, the status for organizer becomes `NEEDS_ACTION`
+	// even though it was ACCEPTED in the received event
+	for organizer, status := range organizers {
+		buf.WriteString(organizer)
+		buf.WriteString(status)
+	}
+	buf.WriteString(desc)
+	buf.WriteString(summary)
+	buf.WriteString(dtstart.String())
+	buf.WriteString(dtend.String())
+
+	hash.Write(buf.Bytes())
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/emersion/go-ical"
 )
 
+// EventUid returns the UID of calendar event. If the cal object doesn't have exactly
+// one event and one UID prop an error is returned.
 func EventUid(cal *ical.Calendar) (string, error) {
 	if cal == nil {
 		return "", fmt.Errorf("event is nil")
@@ -60,6 +62,7 @@ func EventOrganizers(cal *ical.Calendar) map[string]string {
 	return organizers
 }
 
+// EventDescription returns the concatenation of descriptions of all the events in the cal object
 func EventDescription(cal *ical.Calendar) string {
 	var desc string
 	for _, e := range cal.Events() {
@@ -70,6 +73,7 @@ func EventDescription(cal *ical.Calendar) string {
 	return desc
 }
 
+// EventSummary returns the concatenation of summaries of all the events in the cal object
 func EventSummary(cal *ical.Calendar) string {
 	var summary string
 	for _, e := range cal.Events() {
@@ -80,6 +84,7 @@ func EventSummary(cal *ical.Calendar) string {
 	return summary
 }
 
+// EventDTStart returns the earliest start time from all the events in the cal object
 func EventDTStart(cal *ical.Calendar) (time.Time, error) {
 	var start time.Time
 	for _, e := range cal.Events() {
@@ -97,6 +102,7 @@ func EventDTStart(cal *ical.Calendar) (time.Time, error) {
 	return start, nil
 }
 
+// EventDTEnd returns the latest end time from all the events in the cal object
 func EventDTEnd(cal *ical.Calendar) (time.Time, error) {
 	var end time.Time
 	for _, e := range cal.Events() {
