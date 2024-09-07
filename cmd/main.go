@@ -13,59 +13,58 @@ import (
 	"github.com/nakamorg/calbridge/pkg/backend"
 	"github.com/nakamorg/calbridge/pkg/caldav"
 	"github.com/nakamorg/calbridge/pkg/email"
+	"github.com/nakamorg/calbridge/pkg/user"
 	"github.com/nakamorg/calbridge/pkg/util"
 )
 
 func main() {
 	ctx := context.Background()
-	if err := util.LoadDotEnv(""); err != nil {
+	var err error
+	var users []user.User
+	var storage backend.Backend
+
+	if users, err = user.LoadFromJson("config.json"); err != nil {
 		log.Fatal(err)
 	}
-	calClient, err := caldav.NewClient(
-		os.Getenv("CALDAV_USER"),
-		os.Getenv("CALDAV_PASSWORD"),
-		os.Getenv("CALDAV_URL"),
-	)
-	if err != nil {
-		log.Fatalf("Failed to create caldav client: %v", err)
+
+	if storage, err = backend.NewBoltBackend("/tmp/calbridge.db", os.Getenv("IMAP_USER")); err != nil {
+		log.Fatalf("Failed to create storage: %v", err)
 	}
-	smtpClient, err := email.NewSMTPClient(
-		os.Getenv("SMTP_USER"),
-		os.Getenv("SMTP_PASSWORD"),
-		os.Getenv("SMTP_HOST"),
-		"587",
-	)
-	if err != nil {
-		log.Fatalf("Failed to create smtp client: %v", err)
+	defer storage.Close()
+
+	for _, user := range users {
+		handleUser(ctx, user, storage)
+	}
+}
+
+func handleUser(ctx context.Context, user user.User, storage backend.Backend) error {
+	var err error
+	var calClient *caldav.Client
+	var smtpClient *email.SMTPClient
+	var imapClient *email.IMAPClient
+
+	if calClient, err = caldav.NewClient(user.CalDAV.Username, user.CalDAV.Password, user.CalDAV.URL); err != nil {
+		return fmt.Errorf("failed to create caldav client: %w", err)
+	}
+
+	if smtpClient, err = email.NewSMTPClient(user.SMTP.Username, user.SMTP.Password, user.SMTP.Host, "587"); err != nil {
+		return fmt.Errorf("failed to create smtp client: %w", err)
 	}
 	defer smtpClient.Close()
 
-	imapClient, err := email.NewIMAPClient(
-		os.Getenv("IMAP_USER"),
-		os.Getenv("IMAP_PASSWORD"),
-		os.Getenv("IMAP_HOST"),
-		"993",
-	)
-	if err != nil {
-		log.Fatalf("Failed to create imap client: %v", err)
+	if imapClient, err = email.NewIMAPClient(user.IMAP.Username, user.IMAP.Password, user.IMAP.Host, "993"); err != nil {
+		return fmt.Errorf("failed to create imap client: %w", err)
 	}
 	defer imapClient.Close()
 
-	// backend := backend.NewFileBackend("/tmp/calbridge.csv")
-	backend, err := backend.NewBoltBackend("/tmp/calbridge.db", os.Getenv("IMAP_USER"))
-	if err != nil {
-		log.Fatalf("Failed to create backend: %v", err)
-	}
-	defer backend.Close()
-
-	if err := sendInvites(ctx, calClient, smtpClient, backend); err != nil {
+	if err = sendInvites(ctx, calClient, smtpClient, storage); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := addInvites(ctx, calClient, imapClient, backend); err != nil {
+	if err = addInvites(ctx, calClient, imapClient, storage); err != nil {
 		log.Fatal(err)
 	}
-
+	return nil
 }
 
 func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *email.SMTPClient, storage backend.Backend) error {

@@ -32,18 +32,15 @@ func NewBoltBackend(dbPath, user string) (Backend, error) {
 	return &BoltBackend{db: db, user: user}, nil
 }
 
-// TODO: These might not be thread/goroutine safe
-
 func (bb *BoltBackend) Get(ctx context.Context, data Data) (Data, error) {
 	key := bb.key(data)
 	err := bb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bb.user))
 		v := b.Get(key)
 		if v == nil {
-			return nil // No data found
+			return nil
 		}
 
-		// Unmarshal the data
 		if err := json.Unmarshal(v, &data); err != nil {
 			return err
 		}
