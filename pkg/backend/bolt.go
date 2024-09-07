@@ -8,34 +8,26 @@ import (
 )
 
 type BoltBackend struct {
-	user string
-	db   *bolt.DB
+	db *bolt.DB
 }
 
-func NewBoltBackend(dbPath, user string) (Backend, error) {
+func NewBoltBackend(dbPath string) (Backend, error) {
 	db, err := bolt.Open(dbPath, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Ensure the bucket exists
-	// TODO: Don't think it;s a good idea to create a client per user. As the DB file is
-	// shared - these clents will block each/other endlessly. Maybe better to share the client
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(user))
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &BoltBackend{db: db, user: user}, nil
+	return &BoltBackend{db: db}, nil
 }
 
 func (bb *BoltBackend) Get(ctx context.Context, data Data) (Data, error) {
 	key := bb.key(data)
 	err := bb.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bb.user))
+		b := tx.Bucket([]byte(data.User))
+		if b == nil {
+			return nil
+		}
+
 		v := b.Get(key)
 		if v == nil {
 			return nil
@@ -46,14 +38,16 @@ func (bb *BoltBackend) Get(ctx context.Context, data Data) (Data, error) {
 		}
 		return nil
 	})
-
 	return data, err
 }
 
 func (bb *BoltBackend) Put(ctx context.Context, data Data) error {
 	key := bb.key(data)
 	return bb.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bb.user))
+		b, err := tx.CreateBucketIfNotExists([]byte(data.User))
+		if err != nil {
+			return err
+		}
 
 		dataBytes, err := json.Marshal(data)
 		if err != nil {

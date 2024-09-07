@@ -24,28 +24,28 @@ type User struct {
 	} `json:"imap"`
 }
 
-type Config struct {
+type config struct {
 	Users []User `json:"users"`
 }
 
 // LoadFromJson reads a json file containing calbridge user information and returns the Users
 func LoadFromJson(path string) ([]User, error) {
-	config, err := LoadConfig(path)
+	config, err := loadConfig(path)
 	if err != nil {
 		return nil, err
 	}
 	return config.Users, err
 }
 
-// LoadFromJson reads a json file containing calbridge user information and returns the Users
-func LoadConfig(path string) (Config, error) {
-	var config Config
+// loadConfig reads and returns the json config
+func loadConfig(path string) (config, error) {
+	var conf config
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return config, err
+		return conf, err
 	}
-	err = json.Unmarshal(data, &config)
-	return config, err
+	err = json.Unmarshal(data, &conf)
+	return conf, err
 }
 
 // LoadFromDB reads calbridge users info from db and returns

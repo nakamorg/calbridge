@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/emersion/go-ical"
@@ -27,7 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if storage, err = backend.NewBoltBackend("/tmp/calbridge.db", os.Getenv("IMAP_USER")); err != nil {
+	if storage, err = backend.NewBoltBackend("/tmp/calbridge.db"); err != nil {
 		log.Fatalf("Failed to create storage: %v", err)
 	}
 	defer storage.Close()
@@ -57,17 +56,17 @@ func handleUser(ctx context.Context, user user.User, storage backend.Backend) er
 	}
 	defer imapClient.Close()
 
-	if err = sendInvites(ctx, calClient, smtpClient, storage); err != nil {
+	if err = sendInvites(ctx, user.Name, calClient, smtpClient, storage); err != nil {
 		log.Fatal(err)
 	}
 
-	if err = addInvites(ctx, calClient, imapClient, storage); err != nil {
+	if err = addInvites(ctx, user.Name, calClient, imapClient, storage); err != nil {
 		log.Fatal(err)
 	}
 	return nil
 }
 
-func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *email.SMTPClient, storage backend.Backend) error {
+func sendInvites(ctx context.Context, username string, calClient *caldav.Client, smtpClient *email.SMTPClient, storage backend.Backend) error {
 	var events []*ical.Calendar
 	var err error
 	var data backend.Data
@@ -77,7 +76,7 @@ func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *emai
 	}
 	fmt.Println("sending")
 	for _, event := range events {
-		if data, err = eventBackendData(ctx, event, backend.DirectionOut, storage); err != nil {
+		if data, err = eventBackendData(ctx, username, event, backend.DirectionOut, storage); err != nil {
 			return fmt.Errorf("failed creating event backend data: %v", err)
 		}
 		if data.Synced || data.Direction != backend.DirectionOut {
@@ -96,7 +95,7 @@ func sendInvites(ctx context.Context, calClient *caldav.Client, smtpClient *emai
 	return nil
 }
 
-func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email.IMAPClient, storage backend.Backend) error {
+func addInvites(ctx context.Context, username string, calClient *caldav.Client, imapClient *email.IMAPClient, storage backend.Backend) error {
 	var events []*ical.Calendar
 	var err error
 	var data backend.Data
@@ -107,7 +106,7 @@ func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email
 	fmt.Println("adding")
 
 	for _, event := range events {
-		if data, err = eventBackendData(ctx, event, backend.DirectionIn, storage); err != nil {
+		if data, err = eventBackendData(ctx, username, event, backend.DirectionIn, storage); err != nil {
 			return fmt.Errorf("failed creating event backend data: %v", err)
 		}
 		if data.Synced || data.Direction != backend.DirectionIn {
@@ -126,21 +125,22 @@ func addInvites(ctx context.Context, calClient *caldav.Client, imapClient *email
 	return nil
 }
 
-func eventBackendData(ctx context.Context, cal *ical.Calendar, direction backend.Direction, storage backend.Backend) (backend.Data, error) {
+func eventBackendData(ctx context.Context, username string, cal *ical.Calendar, direction backend.Direction, storage backend.Backend) (backend.Data, error) {
+	var err error
+	var uid, hash string
+
 	data := backend.Data{
+		User:      username,
 		Synced:    false,
 		Direction: direction,
 	}
-	for _, event := range cal.Events() {
-		for _, p := range event.Props.Values(ical.PropUID) {
-			data.UID = p.Value
-		}
-		if len(data.UID) == 0 {
-			return data, fmt.Errorf("could not find event uid")
-		}
+
+	if uid, err = util.EventUid(cal); err != nil {
+		return data, err
 	}
-	hash, err := eventHash(cal)
-	if err != nil {
+	data.UID = uid
+
+	if hash, err = eventHash(cal); err != nil {
 		return data, fmt.Errorf("could not find event hash: %v", err)
 	}
 	data.Hash = hash
