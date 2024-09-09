@@ -11,18 +11,18 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/nakamorg/calbridge/pkg/backend"
 	"github.com/nakamorg/calbridge/pkg/caldav"
+	"github.com/nakamorg/calbridge/pkg/config"
 	"github.com/nakamorg/calbridge/pkg/email"
-	"github.com/nakamorg/calbridge/pkg/user"
 	"github.com/nakamorg/calbridge/pkg/util"
 )
 
 func main() {
 	ctx := context.Background()
 	var err error
-	var users []user.User
+	var users []config.User
 	var storage backend.Backend
 
-	if users, err = user.LoadFromJson("config.json"); err != nil {
+	if users, err = config.LoadFromConfig("config.json"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -36,7 +36,7 @@ func main() {
 	}
 }
 
-func handleUser(ctx context.Context, user user.User, storage backend.Backend) error {
+func handleUser(ctx context.Context, user config.User, storage backend.Backend) error {
 	var err error
 	var calClient *caldav.Client
 	var smtpClient *email.SMTPClient
@@ -56,25 +56,24 @@ func handleUser(ctx context.Context, user user.User, storage backend.Backend) er
 	}
 	defer imapClient.Close()
 
-	if err = sendInvites(ctx, user.Name, calClient, smtpClient, storage); err != nil {
+	if err = sendInvites(ctx, user.Name, user.CalDAV.EventDays, calClient, smtpClient, storage); err != nil {
 		log.Fatal(err)
 	}
 
-	if err = addInvites(ctx, user.Name, calClient, imapClient, storage); err != nil {
+	if err = addInvites(ctx, user.Name, user.IMAP.EmailHours, calClient, imapClient, storage); err != nil {
 		log.Fatal(err)
 	}
 	return nil
 }
 
-func sendInvites(ctx context.Context, username string, calClient *caldav.Client, smtpClient *email.SMTPClient, storage backend.Backend) error {
+func sendInvites(ctx context.Context, username string, eventDays int, calClient *caldav.Client, smtpClient *email.SMTPClient, storage backend.Backend) error {
 	var events []*ical.Calendar
 	var err error
 	var data backend.Data
 
-	if events, err = calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 1, 0)); err != nil {
+	if events, err = calClient.GetEvents(ctx, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 0, eventDays)); err != nil {
 		return fmt.Errorf("failed reading future events: %v", err)
 	}
-	fmt.Println("sending")
 	for _, event := range events {
 		if data, err = eventBackendData(ctx, username, event, backend.DirectionOut, storage); err != nil {
 			return fmt.Errorf("failed creating event backend data: %v", err)
@@ -82,6 +81,7 @@ func sendInvites(ctx context.Context, username string, calClient *caldav.Client,
 		if data.Synced || data.Direction != backend.DirectionOut {
 			continue
 		}
+		fmt.Println("sending")
 		fmt.Println(event.Events()[0].Props)
 		if err = smtpClient.SendCalendarInvite(event); err != nil {
 			return fmt.Errorf("failed sending invitation: %v", err)
@@ -95,15 +95,14 @@ func sendInvites(ctx context.Context, username string, calClient *caldav.Client,
 	return nil
 }
 
-func addInvites(ctx context.Context, username string, calClient *caldav.Client, imapClient *email.IMAPClient, storage backend.Backend) error {
+func addInvites(ctx context.Context, username string, emailHours int, calClient *caldav.Client, imapClient *email.IMAPClient, storage backend.Backend) error {
 	var events []*ical.Calendar
 	var err error
 	var data backend.Data
 
-	if events, err = imapClient.ReadCalendarInvites(3); err != nil {
+	if events, err = imapClient.ReadCalendarInvites(emailHours); err != nil {
 		return fmt.Errorf("failed reading emails: %v", err)
 	}
-	fmt.Println("adding")
 
 	for _, event := range events {
 		if data, err = eventBackendData(ctx, username, event, backend.DirectionIn, storage); err != nil {
@@ -115,6 +114,7 @@ func addInvites(ctx context.Context, username string, calClient *caldav.Client, 
 		if err := calClient.PutEvent(ctx, event); err != nil {
 			return fmt.Errorf("failed adding event: %v", err)
 		}
+		fmt.Println("adding")
 		fmt.Println(event.Events()[0].Props)
 		data.Synced = true
 		data.SyncedTime = time.Now()

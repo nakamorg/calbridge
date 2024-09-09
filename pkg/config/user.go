@@ -1,16 +1,15 @@
-package user
-
-import (
-	"encoding/json"
-	"os"
-)
+package config
 
 type User struct {
-	Name   string `json:"name"`
-	CalDAV struct {
+	Name string `json:"name"`
+	// How often events and emails are checked, parsed as golang time. Ex: 30m, 1h, 3h etc
+	Frequency string `json:"frequency"`
+	CalDAV    struct {
 		URL      string `json:"url"`
 		Username string `json:"username"`
 		Password string `json:"password"`
+		// Number of upcoming days for which to read CalDAV events and send invitations.
+		EventDays int `json:"eventDays"`
 	} `json:"caldav"`
 	SMTP struct {
 		Host     string `json:"host"`
@@ -21,31 +20,18 @@ type User struct {
 		Host     string `json:"host"`
 		Username string `json:"username"`
 		Password string `json:"password"`
+		// Number of past hours from which to read emails for calendar invites.
+		EmailHours int `json:"emailHours"`
 	} `json:"imap"`
 }
 
-type config struct {
-	Users []User `json:"users"`
-}
-
-// LoadFromJson reads a json file containing calbridge user information and returns the Users
-func LoadFromJson(path string) ([]User, error) {
+// LoadFromConfig reads a json file containing calbridge user information and returns the Users
+func LoadFromConfig(path string) ([]User, error) {
 	config, err := loadConfig(path)
 	if err != nil {
 		return nil, err
 	}
 	return config.Users, err
-}
-
-// loadConfig reads and returns the json config
-func loadConfig(path string) (config, error) {
-	var conf config
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return conf, err
-	}
-	err = json.Unmarshal(data, &conf)
-	return conf, err
 }
 
 // LoadFromDB reads calbridge users info from db and returns
