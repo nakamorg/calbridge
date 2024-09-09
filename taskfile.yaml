@@ -21,18 +21,13 @@ tasks:
     env:
       CGO_ENABLED: 0
 
-  tag:
-    desc: Adding {{.NEXT_VERSION}} tag
-    cmds:
-      - git tag {{.NEXT_VERSION}}
-      - git push origin {{.NEXT_VERSION}}
-
   release:
     desc: Create a new GitHub release and upload binaries
     cmds:
     - |
       VERSION=${VERSION_OVERRIDE:-{{.NEXT_VERSION}}}
       gh release create "$VERSION" builds/* --title "Release $VERSION" --notes "Release $VERSION"
+    - git fetch --tags
     env:
       VERSION_OVERRIDE: ''
 
@@ -40,5 +35,4 @@ tasks:
     desc: Build and release
     cmds:
     - task: build
-    - task: tag
     - task: release
