@@ -3,9 +3,9 @@ Calbridge is a tool that acts as a bridge between a CalDAV server and mail serve
 
 # Features
 - Synchronize calendar events from CalDAV.
-- Send calendar invites through SMTP.
-- Read calendar invites from IMAP.
-- Multi user support
+- Read calendar events from your caldav server and sends invitations using email.
+- Read calendar invites from emails using IMAP and add those to your caldav server.
+- Multi user support.
 - (Planned) Run continuously
 - (Planned) Handle all users concurrently
 
@@ -18,8 +18,9 @@ Calbridge is a tool that acts as a bridge between a CalDAV server and mail serve
     go mod tidy
     go build -o /tmp/calbridge cmd/main.go
     ```
-2. (Coming soon) download from github release page of this repository
+2. Or download and use the pre-built binaries from github release page of this repository.
 
 # Usage
-1. Using `config.example.json` file, create a `config.json` file. Make sure to provide correct connection details of your caldav, smtp and imap.
-2. Invoke `calbridge` binary
+1. Invoke `calbridge` binary.
+> [!NOTE]
+> If it's your first time using **calbridge**, a sample config file will be created for you in your home directory. Update that with your caldav, smtp and imap details
