@@ -23,4 +23,4 @@ Calbridge is a tool that acts as a bridge between a CalDAV server and mail serve
 # Usage
 1. Invoke `calbridge` binary.
 > [!NOTE]
-> If it's your first time using calbridge, a sample config file will be created for you in your home directory. Update that with your caldav, smtp and imap details
+> If it's your first time using **calbridge**, a sample config file will be created for you in your home directory. Update that with your caldav, smtp and imap details
