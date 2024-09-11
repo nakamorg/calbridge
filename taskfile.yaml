@@ -14,22 +14,19 @@ tasks:
   build:
     desc: Build the binary for different platforms
     cmds:
+      - rm -r builds
       - go mod tidy
-      - GOOS=darwin GOARCH=arm64 go build -o builds/calbridge-darwin-arm64 cmd/main.go
-      - GOOS=linux GOARCH=amd64 go build -o builds/calbridge-linux-amd64 cmd/main.go
-      - GOOS=linux GOARCH=arm64 go build -o builds/calbridge-linux-arm64 cmd/main.go
+      - GOOS=darwin GOARCH=arm64 go build -o builds/calbridge-darwin-arm64-{{.NEXT_VERSION}} cmd/main.go
+      - GOOS=linux GOARCH=amd64 go build -o builds/calbridge-linux-amd64-{{.NEXT_VERSION}} cmd/main.go
+      - GOOS=linux GOARCH=arm64 go build -o builds/calbridge-linux-arm64-{{.NEXT_VERSION}} cmd/main.go
     env:
       CGO_ENABLED: 0
 
   release:
     desc: Create a new GitHub release and upload binaries
     cmds:
-    - |
-      VERSION=${VERSION_OVERRIDE:-{{.NEXT_VERSION}}}
-      gh release create "$VERSION" builds/* --title "Release $VERSION" --notes "Release $VERSION"
+    - gh release create {{.NEXT_VERSION}} builds/* --title "Release {{.NEXT_VERSION}}" --notes "Release for {{.NEXT_VERSION}}"
     - git fetch --tags
-    env:
-      VERSION_OVERRIDE: ''
 
   all:
     desc: Build and release
