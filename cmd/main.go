@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/emersion/go-ical"
@@ -21,19 +24,43 @@ func main() {
 	var err error
 	var users []config.User
 	var storage backend.Backend
-
-	if users, err = config.LoadFromConfig("config.json"); err != nil {
+	var configFolder string
+	configFolder, err = configFolderPath()
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	if storage, err = backend.NewBoltBackend("/tmp/calbridge.db"); err != nil {
+	configFilePath := filepath.Join(configFolder, "config.json")
+	if users, err = config.LoadUsersFromConfig(configFilePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("could not find the config file. A sample config file will be created for you at %s\n", configFilePath)
+			if err := config.CreateSampleConfig(configFilePath); err != nil {
+				log.Fatalf("failed creating sample config file: %v", err)
+			}
+			log.Fatal("update the sample file with real configuration data")
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	if storage, err = backend.NewBoltBackend(filepath.Join(configFolder, "bolt.db")); err != nil {
 		log.Fatalf("Failed to create storage: %v", err)
 	}
 	defer storage.Close()
 
 	for _, user := range users {
-		handleUser(ctx, user, storage)
+		if err := handleUser(ctx, user, storage); err != nil {
+			log.Print(err)
+		}
 	}
+}
+
+func configFolderPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".calbridge"), nil
 }
 
 func handleUser(ctx context.Context, user config.User, storage backend.Backend) error {
